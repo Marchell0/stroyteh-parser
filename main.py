@@ -85,8 +85,27 @@ def parse_data(response) -> dict:
     return site_data
 
 
+
 def write_xlsx(data: dict, row: int):
     """Записываем данные в эксель файл"""
+    sheet['I' + str(row)].value = data['price']
+    sheet['J' + str(row)].value = data['old_price']
+    sheet['K' + str(row)].value = data['description']
+    sheet['L' + str(row)].value = data['categoty_path']
+    if len(data['ware_cod']) > 1:
+        print('Два идентификатора одного товара?')
+    sheet['M' + str(row)].value = data['ware_cod'][0]
+    sheet['N' + str(row)].value = data['image_url']
+    characteristics = data['characteristics']
+    if characteristics:
+        col = 15
+        for key, value in characteristics.items():
+            characteristic = 'Название характеристики = ' + key + ' @@ Значение характеристики = ' + value
+            sheet.cell(row=row, column=col).value = characteristic
+            col += 1
+    wb.save(file)
+
+
 def save_image(url: str):
     """Сохраняем картинку в локальное храниелище"""
     img_name = url.split('/')[-1]
@@ -103,6 +122,8 @@ def main():
     xlsx_data = read_xlsx()
     for url, row in xlsx_data:
         response = get_response(url, user_agent)
+        page_data = get_all_page_data(response)
+        write_xlsx(page_data, row)
         image_url = page_data['image_url']
         if image_url:
             save_image(image_url)
