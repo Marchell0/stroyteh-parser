@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from fake_useragent import UserAgent
 from openpyxl import load_workbook
+from progress.bar import IncrementalBar
 
 
 base_dir = os.path.dirname(__file__)
@@ -18,8 +19,11 @@ sheet = wb.get_sheet_by_name('only_product')
 def read_xlsx() -> Generator:
     """Читаем xlsx файл"""
     row_count = sheet.max_row
+    print(f'{row_count - 1} urls уйдут на обход')
+    bar = IncrementalBar('Processing', max = row_count - 1)
     for row in range(2, row_count + 1):
         url = sheet['A' + str(row)].value
+        bar.next()
         yield url, row
 
 
