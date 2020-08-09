@@ -87,7 +87,15 @@ def parse_data(response) -> dict:
 
 def write_xlsx(data: dict, row: int):
     """Записываем данные в эксель файл"""
-    pass
+def save_image(url: str):
+    """Сохраняем картинку в локальное храниелище"""
+    img_name = url.split('/')[-1]
+    img_path = base_dir + '\\images\\' + img_name
+    print('Качаем картинку')
+    file_object = get_response(url, get_user_agent())
+    with open(img_path, 'bw') as f:
+        for chunk in file_object.iter_content(8192):
+            f.write(chunk)
 
 
 def main():
@@ -95,8 +103,9 @@ def main():
     xlsx_data = read_xlsx()
     for url, row in xlsx_data:
         response = get_response(url, user_agent)
-        site_data = parse_data(response)
-        write_xlsx(site_data, row)
+        image_url = page_data['image_url']
+        if image_url:
+            save_image(image_url)
 
 
 if __name__ == "__main__":
