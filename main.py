@@ -1,6 +1,5 @@
 import os
 import re
-from pprint import pprint
 from typing import Generator
 
 import requests
@@ -11,8 +10,8 @@ from progress.bar import IncrementalBar
 
 
 base_dir = os.path.dirname(__file__)
-file = base_dir + '\\for_parsing.xlsx'
-wb = load_workbook(file)
+xlsx_file = base_dir + '\\for_parsing.xlsx'
+wb = load_workbook(xlsx_file)
 sheet = wb.get_sheet_by_name('only_product')
 
 
@@ -35,20 +34,20 @@ def get_user_agent() -> dict:
 
 
 def get_response(url: str, header: dict) -> requests.Response:
-    """Получем http(s) ответ от сервера"""
-    r = requests.get(url, headers=header, verify=False)
+    """Получаем http(s) ответ от сервера"""
+    r = requests.get(url, headers=header, stream=True)
     if r.ok:
         return r
     else:
         print(f'Ошибка {r.status_code}')
 
 
-def parse_data(response) -> dict:
-    """Сбор необходимых данных"""
+def get_all_page_data(response: requests.Response) -> dict:
+    """Сбор всех необходимых данных"""
     html = response.text
     soup = bs(html, 'lxml')
-    url = response.url
-    print(url)
+    print(response.url)
+
     try:
         price_sourse = soup.find('div', class_='price').text.strip()
         # Валюта
@@ -57,57 +56,92 @@ def parse_data(response) -> dict:
         price = current_price + ' ' + price_currency
     except AttributeError:
         price = ''
+
     try:
         old_price = soup.find('div', class_='old-price').text.strip()
     except AttributeError:
         old_price = ''
+
     try:
-        description = soup.find('div', class_='col-md-6').text.strip()
+        description = soup.find('div', id='tab-description') \
+            .find('p').find_parent('div', class_='col-md-6').text.strip()
         description = re.sub(r' +', ' ', description)
         description = re.sub(r' \n', '\n', description)
         description = re.sub(r'\n ', '\n', description)
+        description = re.sub(r'\n+', '\n', description)
     except AttributeError:
         description = ''
+
     try:
-        ware_cod = soup.find('span', class_='sku cod').text.strip()
-        cod = re.findall(r'\d+', ware_cod)
+        ware_code = soup.find('span', class_='sku cod').text.strip()
+        code = re.findall(r'\d+', ware_code)
     except AttributeError:
-        cod = ''
+        code = ['']
+
     try:
         image_url = soup.find('meta', property='og:image')['content']
     except AttributeError:
         image_url = ''
-    
-    site_data = {
+
+    if image_url:
+        img_name = image_url.split('/')[-1]
+        img_path = '/images/' + img_name
+    else:
+        img_path = ''
+
+    try:
+        category_paths = soup.find_all('ol', class_='breadcrumb')
+        category_path = ' > '.join([i.text.strip() for i in category_paths])
+        category_path = re.sub(r'\n+', r'\n', category_path)
+        category_path = re.sub(r'\n', ' > ', category_path)
+    except AttributeError:
+        category_path = ''
+
+    try:
+        characteristics = {}
+        characteristics_trs = soup.find('table', class_='reviewtab').find_all('tr')
+        if characteristics_trs:
+            for chars in characteristics_trs:
+                tds = chars.find_all('td')
+                char_name = tds[0].text.strip()
+                char_value = tds[1].text.strip()
+                characteristics[char_name] = char_value
+    except AttributeError:
+        characteristics = {}
+
+    page_data = {
         'price': price,
         'old_price': old_price,
         'description': description,
-        'ware_cod': cod,
+        'characteristics': characteristics,
+        'category_path': category_path,
+        'ware_code': code,
         'image_url': image_url,
+        'img_path': img_path,
     }
-    pprint(site_data)
-    return site_data
+
+    return page_data
 
 
-
-def write_xlsx(data: dict, row: int):
+def write_xlsx(data: dict, row: int) -> None:
     """Записываем данные в эксель файл"""
     sheet['I' + str(row)].value = data['price']
     sheet['J' + str(row)].value = data['old_price']
     sheet['K' + str(row)].value = data['description']
-    sheet['L' + str(row)].value = data['categoty_path']
-    if len(data['ware_cod']) > 1:
+    sheet['L' + str(row)].value = data['category_path']
+    if len(data['ware_code']) > 1:
         print('Два идентификатора одного товара?')
-    sheet['M' + str(row)].value = data['ware_cod'][0]
+    sheet['M' + str(row)].value = data['ware_code'][0]
     sheet['N' + str(row)].value = data['image_url']
+    sheet['O' + str(row)].value = data['img_path']
     characteristics = data['characteristics']
     if characteristics:
-        col = 15
+        col = 16
         for key, value in characteristics.items():
             characteristic = 'Название характеристики = ' + key + ' @@ Значение характеристики = ' + value
             sheet.cell(row=row, column=col).value = characteristic
             col += 1
-    wb.save(file)
+    wb.save(xlsx_file)
 
 
 def save_image(url: str):
@@ -122,6 +156,7 @@ def save_image(url: str):
 
 
 def main():
+    """Основная функция модуля. Вызов всех необходимых функций"""
     user_agent = get_user_agent()
     xlsx_data = read_xlsx()
     for url, row in xlsx_data:
